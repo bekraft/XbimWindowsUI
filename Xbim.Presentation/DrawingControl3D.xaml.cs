@@ -69,6 +69,8 @@ namespace Xbim.Presentation
         protected ModelVisual3D Extras;
         protected GridLinesVisual3D GridLines;
 
+        public bool IsEnabledZoomToSelected { get; set; } = true;
+
         public ModelVisual3D OpaquesVisual3D => Opaques;
 
         public ModelVisual3D TransparentsVisual3D => Transparents;
@@ -497,7 +499,7 @@ namespace Xbim.Presentation
             }
             else if (hitObject is XbimMeshLayer<WpfMeshGeometry3D, WpfMaterial>)
             {
-                thisSelectedEntity = GetClickedEntity(hit);
+                thisSelectedEntity = GetClickedEntity(hit).FirstOrDefault();
             }
             else
             {
@@ -588,7 +590,7 @@ namespace Xbim.Presentation
 
             var pHit = new PointGeomInfo
             {
-                Entity = GetClickedEntity(hit),
+                Entity = GetClickedEntity(hit).FirstOrDefault(),
                 Point = hit.PointHit
             };
 
@@ -608,41 +610,45 @@ namespace Xbim.Presentation
             var pRet = new PointGeomInfo
             {
                 Entity = pHit.Entity,
+                ModelCenter = -1.0 * ModelPositions[pHit.Entity.Model].Transform.Translation,
                 Point = hit.MeshHit.Positions[iClosest]
             };
 
             return pRet;
         }
 
-        private IPersistEntity GetClickedEntity(RayMeshGeometry3DHitTestResult hit)
+        private IEnumerable<IPersistEntity> GetClickedEntity(RayMeshGeometry3DHitTestResult hit)
         {
-            var layer = hit?.ModelHit.GetValue(TagProperty) as XbimMeshLayer<WpfMeshGeometry3D, WpfMaterial>;
-            if (layer == null)
-                return null;
+            IEnumerable<XbimMeshFragment> fragments = Enumerable.Empty<XbimMeshFragment>();
+            int[] hitVertices = { hit.VertexIndex1, hit.VertexIndex2, hit.VertexIndex3 };
 
-            var frag = layer.Visible.Meshes.Find(hit.VertexIndex1);
-            var modelId = frag.ModelId;
-            IModel modelHit = null; //default to not hit
-            if (modelId == 0) modelHit = Model;
-            else
+            if (hit?.ModelHit.GetValue(TagProperty) is WpfMeshGeometry3D g)
             {
-                foreach (var refModel in Model.ReferencedModels)
-                {
-                    if (refModel.Model.UserDefinedId != modelId)
-                        continue;
-                    modelHit = refModel.Model;
-                    break;
-                }
+                fragments = hitVertices.Select(i => g.Meshes.Find(i));
             }
-            if (modelHit == null)
+            else if (hit?.ModelHit.GetValue(TagProperty) is XbimMeshLayer<WpfMeshGeometry3D, WpfMaterial> layer)
+            {
+                fragments = hitVertices.Select(i => layer.Visible.Meshes.Find(i));
+            }
+
+            var entities = fragments.Where(f => !f.IsEmpty).Select(f =>
+            {
+                if (f.ModelId == 0)
+                    return Model.Instances[f.EntityLabel];
+                else
+                {
+                    foreach (var refModel in Model.ReferencedModels)
+                    {
+                        if (refModel.Model.UserDefinedId != f.ModelId)
+                            continue;
+
+                        return refModel.Model.Instances[f.EntityLabel];
+                    }
+                }
                 return null;
-            if (frag.IsEmpty)
-                frag = layer.Visible.Meshes.Find(hit.VertexIndex2);
-            if (frag.IsEmpty)
-                frag = layer.Visible.Meshes.Find(hit.VertexIndex3);
-            return frag.IsEmpty
-                ? null
-                : (modelHit.Instances[frag.EntityLabel]);
+            }).Where(e => null != e).ToList();
+
+            return entities;
         }
 
         #endregion
@@ -861,10 +867,7 @@ namespace Xbim.Presentation
             if (d3D == null)
                 return;
 
-
             var newVal = e.NewValue as EntitySelection;
-            
-
             d3D.ReplaceSelection(newVal);
         }
 
@@ -938,7 +941,36 @@ namespace Xbim.Presentation
                 if (newVal != null)
                     d3D.Selection.Add(newVal);
             }
+
+            if (newVal is IIfcProduct product)
+            {
+                var shapeInstance = product.Model.GeometryStore.BeginRead().ShapeInstancesOfEntity(product.EntityLabel).FirstOrDefault();
+                if (null != shapeInstance)
+                {
+                    var s = 1.0 / product.Model.ModelFactors.OneMeter;
+                    var placementHandle = new CombinedManipulator();
+
+                    var handleTransform = new Matrix3D();
+                    // By default 5% of maximum length
+                    var hScale = s * 0.05 * shapeInstance.BoundingBox.Length();
+                    handleTransform.Scale(new Vector3D { X = hScale, Y = hScale, Z = hScale });
+                    placementHandle.Transform = new MatrixTransform3D(handleTransform);
+                    d3D.Extras.Children.Clear();
+                    d3D.Extras.Children.Add(placementHandle);
+
+                    var t = shapeInstance.Transformation.Translation;
+                    
+                    var transform = new Matrix3D();
+                    transform.Translate(new Vector3D { X = s * t.X, Y = s * t.Y, Z = s * t.Z });
+                    
+                    d3D.Extras.Transform = new MatrixTransform3D(transform);
+                }
+            }
+
             d3D.HighlighSelected(newVal);
+
+            if(d3D.IsEnabledZoomToSelected)
+                d3D.ZoomSelected();
         }
 
         [Flags]
@@ -1324,7 +1356,7 @@ namespace Xbim.Presentation
             }
             RecalculateView();
         }
-        
+
 
         /// <summary>
         /// Clears the current graphics and initiates the cascade of events that result in viewing the scene.
