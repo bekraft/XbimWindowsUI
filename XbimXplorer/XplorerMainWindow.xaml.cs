@@ -227,7 +227,7 @@ namespace XbimXplorer
 
         void XplorerMainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            var model = IfcStore.Create(null, XbimSchemaVersion.Ifc2X3, XbimStoreType.InMemoryModel);
+            var model = IfcStore.Create(null, XbimSchemaVersion.Ifc4, XbimStoreType.InMemoryModel);
             ModelProvider.ObjectInstance = model;
             ModelProvider.Refresh();
 
@@ -813,6 +813,10 @@ namespace XbimXplorer
             {
                 var op = MainFrame.DataContext as ObjectDataProvider;
                 return op == null ? null : op.ObjectInstance as IfcStore;
+            }
+            set {
+                ModelProvider.ObjectInstance = value;
+                ModelProvider.Refresh();
             }
         }
 
