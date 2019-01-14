@@ -250,7 +250,96 @@ namespace XbimXplorer
         }
         
         public XbimDBAccess FileAccessMode { get; set; } = XbimDBAccess.Read;
-        
+
+        /// <summary>
+        /// Refreshes the model provider and regenerates geometry.
+        /// </summary>
+        public void RefreshModel()
+        {
+            var bgWorker = new BackgroundWorker()
+            {
+                WorkerReportsProgress = true,
+                WorkerSupportsCancellation = true
+            };
+            
+            StatusMsg.Text = "Regenerating model geometry...";
+
+            bgWorker.DoWork += (sender, e) =>
+            {
+                Logger.LogInformation("Triggered regeneration of geometry model");
+                RegenerateCompleteModelGeometry(e.Argument as IfcStore, sender as BackgroundWorker);
+                e.Result = e.Argument;
+            };
+            bgWorker.ProgressChanged += OnProgressChanged;
+            bgWorker.RunWorkerCompleted += (sender, e) =>
+            {
+                // Reset
+                ModelProvider.ObjectInstance = null;
+                ModelProvider.Refresh();
+                // Set to modified version
+                ModelProvider.ObjectInstance = e.Result as IfcStore;
+                ModelProvider.Refresh();
+
+                ProgressBar.Value = 0;
+                StatusMsg.Text = "Ready";
+            };
+            
+            bgWorker.RunWorkerAsync(Model);
+        }
+
+        private void RegenerateModelGeometry(IModel model, BackgroundWorker worker)
+        {
+            if(_meshModel)
+            {
+                var context = new Xbim3DModelContext(model);
+
+                if (!_multiThreading)
+                    context.MaxThreads = 1;
+#if FastExtrusion
+                context.UseSimplifiedFastExtruder = _simpleFastExtrusion;
+#endif
+                SetDeflection(model);
+                //upgrade to new geometry representation, uses the default 3D model
+                context.CreateContext(worker.ReportProgress, App.ContextWcsAdjustment);
+            }
+            else
+            {
+                Logger.LogWarning("Settings prevent mesh creation.");
+            }
+        }
+
+        private void RegenerateCompleteModelGeometry(IfcStore model, BackgroundWorker worker)
+        {
+            RegenerateModelGeometry(model, worker);
+
+            // mesh references
+            foreach (var modelReference in model.ReferencedModels)
+            {
+                // creates federation geometry contexts if needed
+                Debug.WriteLine(modelReference.Name);
+                if (modelReference.Model == null)
+                    continue;
+                RegenerateModelGeometry(modelReference.Model, worker);
+            }
+
+            if (worker.CancellationPending)
+            //if a cancellation has been requested then don't open the resulting file
+            {
+                try
+                {
+                    model.Close();
+                    if (File.Exists(_temporaryXbimFileName))
+                        File.Delete(_temporaryXbimFileName); //tidy up;
+                    _temporaryXbimFileName = null;
+                    SetOpenedModelFileName(null);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(0, ex, "Failed to cancel open of model while cleaning.");
+                }
+            }
+        }
+
         private void OpenAcceptableExtension(object s, DoWorkEventArgs args)
         {
             var worker = s as BackgroundWorker;
@@ -263,75 +352,20 @@ namespace XbimXplorer
                 _temporaryXbimFileName = Path.GetTempFileName();
                 SetOpenedModelFileName(selectedFilename);
                 var model = IfcStore.Open(selectedFilename, null, null, worker.ReportProgress, FileAccessMode);
-                if (_meshModel)
-                {
-                    // mesh direct model
-                    if (model.GeometryStore.IsEmpty)
-                    {
-                        try
-                        {
-                            var context = new Xbim3DModelContext(model);
-                            
-                            if (!_multiThreading)
-                                context.MaxThreads = 1;
-#if FastExtrusion
-                            context.UseSimplifiedFastExtruder = _simpleFastExtrusion;
-#endif
-                            SetDeflection(model);
-                            //upgrade to new geometry representation, uses the default 3D model
-                            context.CreateContext(worker.ReportProgress, App.ContextWcsAdjustment);
-                        }
-                        catch (Exception geomEx)
-                        {
-                            var sb = new StringBuilder();
-                            sb.AppendLine($"Error creating geometry context of '{selectedFilename}' {geomEx.StackTrace}.");
-                            var newexception = new Exception(sb.ToString(), geomEx);
-                            Logger.LogError(0, newexception, "Error creating geometry context of {filename}", selectedFilename);
-                        }
-                    }
 
-                    // mesh references
-                    foreach (var modelReference in model.ReferencedModels)
-                    {
-                        // creates federation geometry contexts if needed
-                        Debug.WriteLine(modelReference.Name);
-                        if (modelReference.Model == null)
-                            continue;
-                        if (!modelReference.Model.GeometryStore.IsEmpty)
-                            continue;
-                        var context = new Xbim3DModelContext(modelReference.Model);
-                        if (!_multiThreading)
-                            context.MaxThreads = 1;
-#if FastExtrusion
-                        context.UseSimplifiedFastExtruder = _simpleFastExtrusion;
-#endif
-                        SetDeflection(modelReference.Model);                        
-                        //upgrade to new geometry representation, uses the default 3D model
-                        context.CreateContext(worker.ReportProgress, App.ContextWcsAdjustment);
-                    }
-                    if (worker.CancellationPending)
-                    //if a cancellation has been requested then don't open the resulting file
-                    {
-                        try
-                        {
-                            model.Close();
-                            if (File.Exists(_temporaryXbimFileName))
-                                File.Delete(_temporaryXbimFileName); //tidy up;
-                            _temporaryXbimFileName = null;
-                            SetOpenedModelFileName(null);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.LogError(0, ex, "Failed to cancel open of model {filename}", selectedFilename);
-                        }
-                        return;
-                    }
-                }
-                else
+                try
                 {
-                    Logger.LogWarning("Settings prevent mesh creation.");
+                    RegenerateCompleteModelGeometry(model, worker);
+                    args.Result = model;
                 }
-                args.Result = model;
+                catch (Exception geomEx)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"Error creating geometry context of '{selectedFilename}' {geomEx.StackTrace}.");
+                    var newexception = new Exception(sb.ToString(), geomEx);
+                    Logger.LogError(0, newexception, "Error creating geometry context of {filename}", selectedFilename);
+                    args.Result = newexception;
+                }
             }
             catch (Exception ex)
             {
@@ -813,10 +847,6 @@ namespace XbimXplorer
             {
                 var op = MainFrame.DataContext as ObjectDataProvider;
                 return op == null ? null : op.ObjectInstance as IfcStore;
-            }
-            set {
-                ModelProvider.ObjectInstance = value;
-                ModelProvider.Refresh();
             }
         }
 
