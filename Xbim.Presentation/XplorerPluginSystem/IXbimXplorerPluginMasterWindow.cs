@@ -10,6 +10,7 @@ namespace Xbim.Presentation.XplorerPluginSystem
         DrawingControl3D DrawingControl { get; }
         IPersistEntity SelectedItem { get; set; }
         IfcStore Model { get; }
+        void RefreshModel();
         void BroadCastMessage(object sender, string messageTypeString, object messageData);
         void RefreshPlugins();
         bool Activate();
