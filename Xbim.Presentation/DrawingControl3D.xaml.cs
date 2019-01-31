@@ -69,8 +69,6 @@ namespace Xbim.Presentation
         protected ModelVisual3D Extras;
         protected GridLinesVisual3D GridLines;
 
-        public bool IsEnabledZoomToSelected { get; set; } = true;
-
         public ModelVisual3D OpaquesVisual3D => Opaques;
 
         public ModelVisual3D TransparentsVisual3D => Transparents;
@@ -968,9 +966,6 @@ namespace Xbim.Presentation
             }
 
             d3D.HighlighSelected(newVal);
-
-            if(d3D.IsEnabledZoomToSelected)
-                d3D.ZoomSelected();
         }
 
         [Flags]
