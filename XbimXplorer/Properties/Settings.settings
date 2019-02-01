@@ -3,7 +3,7 @@
   <Profiles />
   <Settings>
     <Setting Name="FileAccessMode" Type="Xbim.IO.XbimDBAccess" Scope="User">
-      <Value Profile="(Default)">Read</Value>
+      <Value Profile="(Default)">ReadWrite</Value>
     </Setting>
     <Setting Name="MRUFiles" Type="System.Collections.Specialized.StringCollection" Scope="User">
       <Value Profile="(Default)" />
