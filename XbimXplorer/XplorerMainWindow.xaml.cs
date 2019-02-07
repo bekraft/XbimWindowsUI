@@ -1085,7 +1085,7 @@ namespace XbimXplorer
             else
                 DrawingControl.HiddenInstances = DrawingControl.Selection.ToList();
 
-            DrawingControl.LoadGeometry(Model);
+            DrawingControl.ReloadModel(DrawingControl3D.ModelRefreshOptions.ViewPreserveCameraPosition);
         }
 
         private void IsolateSelected(object sender, RoutedEventArgs e)
@@ -1095,14 +1095,14 @@ namespace XbimXplorer
             else
                 DrawingControl.IsolateInstances = DrawingControl.Selection.ToList();
 
-            DrawingControl.LoadGeometry(Model);
+            DrawingControl.ReloadModel(DrawingControl3D.ModelRefreshOptions.ViewPreserveCameraPosition);
         }
 
         private void RestoreView(object sender, RoutedEventArgs e)
         {
             DrawingControl.IsolateInstances = null;
             DrawingControl.HiddenInstances = null;
-            DrawingControl.LoadGeometry(Model);
+            DrawingControl.ReloadModel(DrawingControl3D.ModelRefreshOptions.ViewPreserveCameraPosition);
         }
 
         private void SelectionMode(object sender, RoutedEventArgs e)
