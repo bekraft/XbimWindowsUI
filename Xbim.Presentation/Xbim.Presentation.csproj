@@ -1,12 +1,35 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
+    <IssuedVersion>5.1</IssuedVersion>
+    
+    <Year>$([System.DateTime]::Now.ToString("yy"))</Year>
+    <Month>$([System.DateTime]::Now.ToString("MM"))</Month>
+    <Day>$([System.DateTime]::Now.ToString("dd"))</Day>
+    <Minute>$([System.Int32]::Parse($([System.DateTime]::Now.ToString("mm"))))</Minute>
+    <Hour>$([System.Int32]::Parse($([System.DateTime]::Now.ToString("HH"))))</Hour>
+
+    <MinuteOfDay>$([MSBuild]::Add($(Minute),$([MSBuild]::Multiply($(Hour),60))))</MinuteOfDay>
+    <HalfMinuteOfDay>$([System.Convert]::ToInt16($([MSBuild]::Divide($(MinuteOfDay), 2))))</HalfMinuteOfDay>
+
+    <AssemblyFileVersionAttribute>[assembly:System.Reflection.AssemblyVersionAttribute("$(IssuedVersion).$(Year)$(Month).$(Day)$(HalfMinuteOfDay)")];</AssemblyFileVersionAttribute>
+  </PropertyGroup>
+
+  <PropertyGroup>    
     <LanguageTargets>$(MSBuildToolsPath)\Microsoft.CSharp.targets</LanguageTargets>
     <TargetFrameworks>net47</TargetFrameworks>
     <Title>Xbim.Presentation</Title>
     <Description>Xbim.WindowsUI is a library containing a set of Windows Forms and WPF controls that can be used to build Windows Xaml 
     or forms-based applications, which can display the 3D geometry and semantic data in IFC building models.</Description>
     <PackageId>Xbim.WindowsUI</PackageId>
+
+    <!-- Unify versions -->
+    <Version>$(IssuedVersion).$(Year)$(Month).$(Day)$(HalfMinuteOfDay)</Version>
+    <AssemblyVersion>$(IssuedVersion).$(Year)$(Month).$(Day)$(HalfMinuteOfDay)</AssemblyVersion>
+    <FileVersion>$(IssuedVersion).$(Year)$(Month).$(Day)$(HalfMinuteOfDay)</FileVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net47|AnyCPU'">
     <OutputPath>..\Output\Debug\</OutputPath>
@@ -26,8 +49,9 @@
   <ItemGroup>
     <PackageReference Include="HelixToolkit.Wpf" Version="2015.1.715" />
     <PackageReference Include="PropertyTools.Wpf" Version="2015.1.66" />
-    <PackageReference Include="Xbim.Essentials" Version="5.1.259" />
-	<PackageReference Include="Xbim.Geometry" Version="5.1.239" />
+    <PackageReference Include="Xbim.Essentials" Version="5.1.258-develop" />
+    <PackageReference Include="Xbim.Geometry.Engine.Interop" Version="5.1.235-develop" />
+    <PackageReference Include="Xbim.ModelGeometry.Scene" Version="5.1.235-develop" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
